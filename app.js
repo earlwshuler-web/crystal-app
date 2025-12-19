@@ -602,13 +602,17 @@ class CrystalApp {
     }
 
     renderCrystalList() {
+        console.log('🔍 renderCrystalList called');
+        console.log('🔍 Total crystals:', this.crystals.length);
+        
         const listContainer = document.getElementById('crystalList');
         
         // Safety check
         if (!listContainer) {
-            console.error('Crystal list container not found');
+            console.error('❌ Crystal list container not found!');
             return;
         }
+        console.log('✅ List container found');
 
         const searchInput = document.getElementById('searchInput');
         const categoryFilter = document.getElementById('categoryFilter');
@@ -622,6 +626,8 @@ class CrystalApp {
             const matchesCategory = !categoryFilterValue || crystal.category === categoryFilterValue;
             return matchesSearch && matchesCategory;
         });
+        
+        console.log('🔍 Filtered crystals:', filtered.length);
 
         // Sort by distance if we have user location
         if (this.userLocation) {
@@ -635,22 +641,28 @@ class CrystalApp {
                         crystal.location.lng
                     )
                 })).sort((a, b) => a.distance - b.distance);
+                console.log('✅ Sorted by distance');
             } catch (error) {
-                console.error('Error calculating distances:', error);
+                console.error('❌ Error calculating distances:', error);
             }
+        } else {
+            console.log('⚠️ No user location for distance sorting');
         }
 
         if (this.crystals.length === 0) {
+            console.log('ℹ️ No crystals to display');
             listContainer.innerHTML = '<p style="text-align: center; color: #6b7280; padding: 2rem;">No crystals yet. Drop your first crystal! 💎</p>';
             return;
         }
         
         if (filtered.length === 0) {
+            console.log('ℹ️ No crystals match filter');
             listContainer.innerHTML = '<p style="text-align: center; color: #6b7280; padding: 2rem;">No crystals match your search</p>';
             return;
         }
 
         try {
+            console.log('🔨 Building HTML for', filtered.length, 'crystals');
             listContainer.innerHTML = filtered.map(crystal => `
                 <div class="crystal-card" data-id="${crystal.id}">
                     <div class="crystal-header">
@@ -669,6 +681,7 @@ class CrystalApp {
                     </div>
                 </div>
             `).join('');
+            console.log('✅ HTML rendered successfully');
 
             // Add click listeners
             listContainer.querySelectorAll('.crystal-card').forEach(card => {
@@ -680,8 +693,9 @@ class CrystalApp {
                     }
                 });
             });
+            console.log('✅ Click listeners added');
         } catch (error) {
-            console.error('Error rendering crystal list:', error);
+            console.error('❌ Error rendering crystal list:', error);
             listContainer.innerHTML = '<p style="text-align: center; color: #ef4444; padding: 2rem;">Error loading crystals. Please refresh.</p>';
         }
     }
