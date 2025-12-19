@@ -369,14 +369,34 @@ class CrystalApp {
     }
 
     switchView(viewName) {
-        document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+        console.log('🔄 Switching to view:', viewName);
+        
+        // Remove active and hidden from all views
+        document.querySelectorAll('.view').forEach(v => {
+            v.classList.remove('active');
+            v.classList.add('hidden');
+        });
         document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
         
-        document.getElementById(`${viewName}View`).classList.add('active');
-        document.querySelector(`[data-view="${viewName}"]`).classList.add('active');
+        // Activate the target view
+        const targetView = document.getElementById(`${viewName}View`);
+        targetView.classList.add('active');
+        targetView.classList.remove('hidden');
+        
+        const targetNav = document.querySelector(`[data-view="${viewName}"]`);
+        if (targetNav) {
+            targetNav.classList.add('active');
+        }
+
+        console.log('✅ View switched to:', viewName);
 
         if (viewName === 'map') {
             setTimeout(() => this.map.invalidateSize(), 100);
+        }
+        
+        if (viewName === 'list') {
+            console.log('📋 List view activated, rendering list...');
+            this.renderCrystalList();
         }
     }
 
