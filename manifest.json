@@ -2,21 +2,21 @@
   "name": "Crystal: Geo-Memory App",
   "short_name": "Crystal",
   "description": "Never forget a location-specific detail again",
-  "start_url": "./index.html",
-  "scope": "./",
+  "start_url": "/crystal-app/",
+  "scope": "/crystal-app/",
   "display": "standalone",
   "background_color": "#6366f1",
   "theme_color": "#6366f1",
   "orientation": "portrait-primary",
   "icons": [
     {
-      "src": "./icon-192.png",
+      "src": "/crystal-app/icon-192.png",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any maskable"
     },
     {
-      "src": "./icon-512.png",
+      "src": "/crystal-app/icon-512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any maskable"
