@@ -17,8 +17,11 @@ class CrystalApp {
     }
 
     async init() {
+        console.log('Crystal App initializing...');
+        
         // Load data from localStorage
         this.loadData();
+        console.log(`Loaded ${this.crystals.length} crystals from storage`);
         
         // Initialize map
         this.initMap();
@@ -34,6 +37,7 @@ class CrystalApp {
         // Update UI
         this.updateStats();
         this.renderCrystalList();
+        console.log('Crystal App initialized successfully');
     }
 
     loadData() {
@@ -115,32 +119,96 @@ class CrystalApp {
         this.markers.forEach(marker => marker.remove());
         this.markers = [];
 
-        // Add markers for all crystals
-        this.crystals.forEach(crystal => {
-            const icon = this.getCategoryIcon(crystal.category);
-            const marker = L.marker([crystal.location.lat, crystal.location.lng], {
+        // Group crystals by location (within 10 meters)
+        const groups = this.groupCrystalsByLocation(this.crystals, 10);
+
+        // Add markers for each group
+        groups.forEach(group => {
+            const icon = group.crystals.length > 1 ? '💎' : this.getCategoryIcon(group.crystals[0].category);
+            const marker = L.marker([group.lat, group.lng], {
                 icon: L.divIcon({
                     className: 'crystal-marker',
-                    html: `<div style="font-size: 30px;">${icon}</div>`,
-                    iconSize: [30, 30]
+                    html: `<div style="font-size: 30px; position: relative;">
+                        ${icon}
+                        ${group.crystals.length > 1 ? `<span style="position: absolute; top: -5px; right: -10px; background: #ef4444; color: white; border-radius: 50%; width: 20px; height: 20px; font-size: 12px; display: flex; align-items: center; justify-content: center; font-weight: bold;">${group.crystals.length}</span>` : ''}
+                    </div>`,
+                    iconSize: [40, 40]
                 })
             }).addTo(this.map);
 
-            marker.bindPopup(`
-                <div class="crystal-popup">
-                    <h3>${crystal.name}</h3>
-                    <p><strong>${this.getCategoryName(crystal.category)}</strong></p>
-                    ${crystal.notes ? `<p>${crystal.notes.substring(0, 100)}${crystal.notes.length > 100 ? '...' : ''}</p>` : ''}
-                    <p><small>${crystal.address || 'Address unknown'}</small></p>
-                </div>
-            `);
+            // Create popup content for all crystals in this group
+            let popupContent = '';
+            if (group.crystals.length === 1) {
+                const crystal = group.crystals[0];
+                popupContent = `
+                    <div class="crystal-popup">
+                        <h3>${this.escapeHtml(crystal.name)}</h3>
+                        <p><strong>${this.getCategoryName(crystal.category)}</strong></p>
+                        ${crystal.notes ? `<p>${this.escapeHtml(crystal.notes.substring(0, 100))}${crystal.notes.length > 100 ? '...' : ''}</p>` : ''}
+                        <p><small>${crystal.address ? this.escapeHtml(crystal.address) : 'Address unknown'}</small></p>
+                        <button onclick="window.app.showCrystalDetail(window.app.crystals.find(c => c.id === ${crystal.id}))" style="margin-top: 0.5rem; padding: 0.5rem 1rem; background: #6366f1; color: white; border: none; border-radius: 6px; cursor: pointer;">View Details</button>
+                    </div>
+                `;
+            } else {
+                popupContent = `
+                    <div class="crystal-popup">
+                        <h3>${group.crystals.length} Crystals Here</h3>
+                        <div style="max-height: 300px; overflow-y: auto;">
+                            ${group.crystals.map(crystal => `
+                                <div style="padding: 0.75rem; margin: 0.5rem 0; background: #f9fafb; border-radius: 6px; cursor: pointer;" onclick="window.app.showCrystalDetail(window.app.crystals.find(c => c.id === ${crystal.id}))">
+                                    <div style="display: flex; justify-content: space-between; align-items: start;">
+                                        <strong>${this.escapeHtml(crystal.name)}</strong>
+                                        <span style="font-size: 1.2rem;">${this.getCategoryIcon(crystal.category)}</span>
+                                    </div>
+                                    ${crystal.notes ? `<p style="margin: 0.25rem 0; font-size: 0.875rem; color: #6b7280;">${this.escapeHtml(crystal.notes.substring(0, 60))}${crystal.notes.length > 60 ? '...' : ''}</p>` : ''}
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                `;
+            }
 
-            marker.on('click', () => {
-                this.showCrystalDetail(crystal);
-            });
+            marker.bindPopup(popupContent, { maxWidth: 300 });
 
             this.markers.push(marker);
         });
+    }
+
+    groupCrystalsByLocation(crystals, thresholdMeters = 10) {
+        const groups = [];
+        const processed = new Set();
+
+        crystals.forEach((crystal, index) => {
+            if (processed.has(index)) return;
+
+            const group = {
+                lat: crystal.location.lat,
+                lng: crystal.location.lng,
+                crystals: [crystal]
+            };
+
+            // Find all crystals within threshold distance
+            crystals.forEach((otherCrystal, otherIndex) => {
+                if (index === otherIndex || processed.has(otherIndex)) return;
+
+                const distance = this.calculateDistance(
+                    crystal.location.lat,
+                    crystal.location.lng,
+                    otherCrystal.location.lat,
+                    otherCrystal.location.lng
+                );
+
+                if (distance <= thresholdMeters) {
+                    group.crystals.push(otherCrystal);
+                    processed.add(otherIndex);
+                }
+            });
+
+            processed.add(index);
+            groups.push(group);
+        });
+
+        return groups;
     }
 
     getCategoryIcon(category) {
@@ -458,63 +526,94 @@ class CrystalApp {
     }
 
     renderCrystalList() {
-        const searchTerm = document.getElementById('searchInput').value.toLowerCase();
-        const categoryFilter = document.getElementById('categoryFilter').value;
+        const listContainer = document.getElementById('crystalList');
+        
+        // Safety check
+        if (!listContainer) {
+            console.error('Crystal list container not found');
+            return;
+        }
+
+        const searchInput = document.getElementById('searchInput');
+        const categoryFilter = document.getElementById('categoryFilter');
+        
+        const searchTerm = searchInput ? searchInput.value.toLowerCase() : '';
+        const categoryFilterValue = categoryFilter ? categoryFilter.value : '';
 
         let filtered = this.crystals.filter(crystal => {
             const matchesSearch = crystal.name.toLowerCase().includes(searchTerm) ||
                                 (crystal.notes && crystal.notes.toLowerCase().includes(searchTerm));
-            const matchesCategory = !categoryFilter || crystal.category === categoryFilter;
+            const matchesCategory = !categoryFilterValue || crystal.category === categoryFilterValue;
             return matchesSearch && matchesCategory;
         });
 
         // Sort by distance if we have user location
         if (this.userLocation) {
-            filtered = filtered.map(crystal => ({
-                ...crystal,
-                distance: this.calculateDistance(
-                    this.userLocation.lat,
-                    this.userLocation.lng,
-                    crystal.location.lat,
-                    crystal.location.lng
-                )
-            })).sort((a, b) => a.distance - b.distance);
+            try {
+                filtered = filtered.map(crystal => ({
+                    ...crystal,
+                    distance: this.calculateDistance(
+                        this.userLocation.lat,
+                        this.userLocation.lng,
+                        crystal.location.lat,
+                        crystal.location.lng
+                    )
+                })).sort((a, b) => a.distance - b.distance);
+            } catch (error) {
+                console.error('Error calculating distances:', error);
+            }
         }
 
-        const listContainer = document.getElementById('crystalList');
+        if (this.crystals.length === 0) {
+            listContainer.innerHTML = '<p style="text-align: center; color: #6b7280; padding: 2rem;">No crystals yet. Drop your first crystal! 💎</p>';
+            return;
+        }
         
         if (filtered.length === 0) {
-            listContainer.innerHTML = '<p style="text-align: center; color: #6b7280; padding: 2rem;">No crystals found</p>';
+            listContainer.innerHTML = '<p style="text-align: center; color: #6b7280; padding: 2rem;">No crystals match your search</p>';
             return;
         }
 
-        listContainer.innerHTML = filtered.map(crystal => `
-            <div class="crystal-card" data-id="${crystal.id}">
-                <div class="crystal-header">
-                    <div class="crystal-title">${crystal.name}</div>
-                    <div class="crystal-category">${this.getCategoryIcon(crystal.category)}</div>
-                </div>
-                ${crystal.notes ? `<div class="crystal-notes">${crystal.notes}</div>` : ''}
-                ${crystal.photos && crystal.photos.length > 0 ? `
-                    <div class="crystal-photos">
-                        ${crystal.photos.map(photo => `<img src="${photo}" alt="Crystal photo">`).join('')}
+        try {
+            listContainer.innerHTML = filtered.map(crystal => `
+                <div class="crystal-card" data-id="${crystal.id}">
+                    <div class="crystal-header">
+                        <div class="crystal-title">${this.escapeHtml(crystal.name)}</div>
+                        <div class="crystal-category">${this.getCategoryIcon(crystal.category)}</div>
                     </div>
-                ` : ''}
-                <div class="crystal-meta">
-                    <span>📍 ${crystal.address ? crystal.address.split(',')[0] : 'Unknown location'}</span>
-                    ${crystal.distance !== undefined ? `<span>🚶 ${this.formatDistance(crystal.distance)}</span>` : ''}
+                    ${crystal.notes ? `<div class="crystal-notes">${this.escapeHtml(crystal.notes)}</div>` : ''}
+                    ${crystal.photos && crystal.photos.length > 0 ? `
+                        <div class="crystal-photos">
+                            ${crystal.photos.slice(0, 3).map(photo => `<img src="${photo}" alt="Crystal photo">`).join('')}
+                        </div>
+                    ` : ''}
+                    <div class="crystal-meta">
+                        <span>📍 ${crystal.address ? this.escapeHtml(crystal.address.split(',')[0]) : 'Unknown location'}</span>
+                        ${crystal.distance !== undefined ? `<span>🚶 ${this.formatDistance(crystal.distance)}</span>` : ''}
+                    </div>
                 </div>
-            </div>
-        `).join('');
+            `).join('');
 
-        // Add click listeners
-        listContainer.querySelectorAll('.crystal-card').forEach(card => {
-            card.addEventListener('click', () => {
-                const id = parseInt(card.dataset.id);
-                const crystal = this.crystals.find(c => c.id === id);
-                this.showCrystalDetail(crystal);
+            // Add click listeners
+            listContainer.querySelectorAll('.crystal-card').forEach(card => {
+                card.addEventListener('click', () => {
+                    const id = parseInt(card.dataset.id);
+                    const crystal = this.crystals.find(c => c.id === id);
+                    if (crystal) {
+                        this.showCrystalDetail(crystal);
+                    }
+                });
             });
-        });
+        } catch (error) {
+            console.error('Error rendering crystal list:', error);
+            listContainer.innerHTML = '<p style="text-align: center; color: #ef4444; padding: 2rem;">Error loading crystals. Please refresh.</p>';
+        }
+    }
+
+    escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
     }
 
     formatDistance(meters) {
